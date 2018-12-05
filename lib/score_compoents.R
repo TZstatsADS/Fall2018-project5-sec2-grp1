@@ -31,8 +31,11 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
   #1. Minimum edit distance d(wci, we) as calculated by Levenshtein's edit distance.
   # with reference in paper Statistical Learning for OCR Text Correction
   d_inverse <- 1-levenshtein.distance(wci, we)/(thres+1)
+  score1 <- d_inverse
   
-  # 2. Normalized longest common subsequence (Allison and Dix, 1986) which takes into account
+  
+  # 2. String similarity
+  # 2.1 Normalized longest common subsequence (Allison and Dix, 1986) which takes into account
   # the length of both the shorter and the longer string for normalization.
   lcs <- sapply(seq_along(we), function(i)paste(LCS(substring(we[i], seq(1, nchar(we[i])), seq(1, nchar(we[i]))),
               substring(wci[i], seq(1, nchar(wci[i])), seq(1, nchar(wci[i]))))$LCS,
@@ -45,7 +48,7 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
 
   
   
-  # 3. Normalized maximal consecutive longest common subsequence, which is a modification
+  # 2.2 Normalized maximal consecutive longest common subsequence, which is a modification
   # of aforementioned factor by limiting the common subsequences to be consecutive.
   ## nmnlcs1
   ## get all forward substrings of 'we'
@@ -56,15 +59,39 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
   len_mclcs1 <-max(nchar(sstr1))
   nmnlcs1 <- 2*len_mclcs1^2/(len_wci+len_we)
   
-  ## nmnlcsn
-  n <-2
-  swen <- stri_sub(we, n, n:nchar(we))
-  sstrn <- na.omit(stri_extract_all_coll(wci, swen, simplify=TRUE))
-  ## match the longest one
-  len_mclcsn <-max(nchar(sstrn))
+  ## 2.3 nmnlcsn
+  mclcsn <- rep(0,nchar(we)-1)
+  for (i in 2:nchar(we)){
+    n <- i
+    swen <- stri_sub(we, n, n:nchar(we))
+    sstrn <- na.omit(stri_extract_all_coll(wci, swen, simplify=TRUE))
+    ## match the longest one
+    mclcsn[i] <-max(nchar(sstrn))
+  }
+  len_mclcsn <-max(mclcsn)
   nmnlcsn <- 2*len_mclcsn^2/(len_wci+len_we)
   
   ## nmnlcsz
+  mclcsz <- rep(0,nchar(we))
+  for (i in 1:nchar(we)){
+    swen <- substr(we, start=i, stop=nchar(we))
+    sstrn <- na.omit(stri_extract_all_coll(wci, swen, simplify=TRUE))
+    ## match the longest one
+    mclcsz[i] <-max(nchar(sstrn))
+  }
+  len_mclcsz <-max(mclcsz)
+  nmnlcsz <- 2*len_mclcsz^2/(len_wci+len_we)
+  
+  
+  
+  ## score for nlcs
+  alpha1 <- 0.25
+  alpha2 <- 0.25
+  alpha3 <- 0.25
+  alpha4 <- 0.25
+  
+  score2 <- alpha1*nlcs+alpha2*nmnlcs1+alpha3*nmnlcsn+alpha4*nmnlcsz
+  
   
   
   # Paper: Statistical Learning for OCR Text Correction
