@@ -4,6 +4,7 @@ Term: Fall 2018
 
 + Sec 2 Group 1 
 + Projec title: Improvement on Post-processing for OCR data
+![image](figs/proj4.png)
 + Team members(in alphabetical order)
 	+ team member 1: Yang Cai
 	+ team member 2: Yunsheng Ma
