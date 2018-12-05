@@ -13,9 +13,9 @@ Term: Fall 2018
 	
 + Project summary: This project is an improvement on Project 4: Opitical character recognition (OCR). We created an OCR post-processing procedure to enhance Tesseract OCR output based on the method described in Statistical Learning for OCR Text correction.
 
-+ Error detection: We made our improvement based on D3 paper: Recognizing Garbage in OCR Output on Historical Documents and Statistical Learning for OCR Text correction. 
++ **Error detection**: We made our improvement based on D3 paper: Recognizing Garbage in OCR Output on Historical Documents and Statistical Learning for OCR Text correction. 
 
-Features:
+**Features**:
 + the length l of the input string
 
 + the number v of vowels and the number c of consonants in the string, as well as the quotients v/l, c/l, v/c (for c = 0)
@@ -47,13 +47,13 @@ Features:
 + A word is likely to be correct if this word with its context occurs in other places. We use a sliding window to construct n-gram contexts for a word. The frequency of one of the context in the n-gram corpus should be greater than a frequency threshold.
 
 
-Model:
+**Model**:
 Change from SVM to Random Forest.
 
-+ Error Correction:
-  + Step 1. Candidate Search
++ **Error Correction**:
++ Step 1. Candidate Search
 
-Select a candidate for each error according to Levenshtein distance
+  + Select a candidate for each error according to Levenshtein distance
 
 + Step 2. Compute Feature Scores
   + Levenshtein edit distance
@@ -74,6 +74,10 @@ Select a candidate for each error according to Levenshtein distance
 
 	
 **Contribution statement**: ([default](doc/a_note_on_contributions.md)) All team members contributed equally in all stages of this project. All team members approve our work presented in this GitHub repository including this contributions statement. 
+
+**References**
++ Recognizing Garbage in OCR Output on Historical Documents
++ Statistical Learning for OCR Text Correction
 
 Following [suggestions](http://nicercode.github.io/blog/2013-04-05-projects/) by [RICH FITZJOHN](http://nicercode.github.io/about/#Team) (@richfitz). This folder is orgarnized as follows.
 
