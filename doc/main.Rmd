@@ -1,5 +1,5 @@
 ---
-title: "Project 5 Detection"
+title: "Project 5 OCR Post-processing"
 output: html_document
 ---
 # Step 1 - Load library and source code
@@ -187,6 +187,50 @@ time_testfeat <- system.time(test_input <- extract_feature(test_tokens_list, tra
 preds <- as.logical(predict(fit_svm, test_input))
 save(preds, time_testfeat, test_input, file="../output/predict_svm.RData")
 ```
+
+
+# Step 4 - Error correction
+
+Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates.
+
+The referenced paper is:
+1. [probability scoring with contextual constraints](https://link.springer.com/content/pdf/10.1007%2FBF01889984.pdf)
+
+2. Mei, J., Islam, A., Wu, Y., Moh'd, A., & Milios, E. E. (2016). *Statistical learning for OCR text correction*. arXiv preprint arXiv:1611.06950. [pdf](https://arxiv.org/pdf/1611.06950.pdf)
+
+3. Aminul Islam and Diana Inkpen. 2009a. *Real-word spelling correction using google web 1tn-gram data set*. In Proceedings of the 18th ACM Conference on Informationand Knowledge Management,CIKM '09, pages 1689-1692, New York, NY, USA. ACM 
+
+4. A. Islam and D. Inkpen. *Semantic text similarity using corpus-based word similarity and string similarity*. ACM Transactions on Knowledge Discovery from Data, vol. 2, no. 2, pp. 1-25, 2008. 
+
++ Input: error tokens in train set and test set
++ Output: trained model&corrections for detected errors in the test set 
+
+## Step 4.1 - Data preperation
+
+```{r}
+
+```
+
+## Step 4.2 - Train the model with score features
+
+### Model selection with cross-validation
+```{r}
+
+```
+
+### Train the model with entire training set 
+
+```{r}
+
+```
+
+## Step 4.3 - Make predictions on test set
+
+```{r}
+
+
+```
+
 
 # Step 5 - Performance measure
 

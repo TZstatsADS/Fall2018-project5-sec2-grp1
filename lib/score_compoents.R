@@ -82,8 +82,6 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
   len_mclcsz <-max(mclcsz)
   nmnlcsz <- 2*len_mclcsz^2/(len_wci+len_we)
   
-  
-  
   ## score for nlcs
   alpha1 <- 0.25
   alpha2 <- 0.25
@@ -92,19 +90,17 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
   
   score2 <- alpha1*nlcs+alpha2*nmnlcs1+alpha3*nmnlcsn+alpha4*nmnlcsz
   
-  
-  
   # Paper: Statistical Learning for OCR Text Correction
   
-  #4 language popularity
+  #3 language popularity
   pop <- sum(lexic==wci)/max_freq
   
-  #5 lexicon existance
+  #4 lexicon existance
   exis <- ifelse(wci %in% Tset, 1, 0)
   
-  #6 context popularity: sliding window of 3-gram for a token: 5 words in total
+  #5 context popularity: sliding window of 3-gram for a token: 5 words in total
   context_3gram_candi<- c(context_3gram[1:2], wci, context_3gram[4:5])
-  slide_window<- list()
+  slide_window <- list()
   slide_window[[1]] <- context_3gram_candi[1:3]
   slide_window[[2]] <- context_3gram_candi[2:4]
   slide_window[[3]] <- context_3gram_candi[3:5]
@@ -116,8 +112,8 @@ score <- function(wci, we, thres, max_freq, lexic, Tset, context_3gram, test_fre
   #######################################################################
   # combined_score <- some function of d_inverse, nlcs, nmnlcs, pop, exis, context_pop
   
-  
-  return(combined_score)
+  scores <- c(score1, score2, pop, exis, context_pop)
+  return(scores)
 }
 
 
