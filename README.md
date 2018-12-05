@@ -14,6 +14,7 @@ Term: Fall 2018
 + Project summary: This project is an improvement on Project 4: Opitical character recognition (OCR). We created an OCR post-processing procedure to enhance Tesseract OCR output based on the method described in Statistical Learning for OCR Text correction.
 
 + Error detection: We made our improvement based on D3 paper: Recognizing Garbage in OCR Output on Historical Documents and Statistical Learning for OCR Text correction. 
+
 Features:
 + the length l of the input string
 
