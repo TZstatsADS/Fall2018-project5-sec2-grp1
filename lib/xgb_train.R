@@ -19,14 +19,14 @@ xgb_train <- function(dat_train, label_train, par=NULL){
                      gamma=0,
                      max.depth=depth,
                      min_child_weight=10,
-                     subsample = 0.5,
-                     colsample_bytree = 0.8,
+                     subsample = 0.8,
+                     colsample_bytree = 1,
                      nthread = 3, 
-                     nrounds = 200,
+                     nrounds = 300,
                      early_stopping_rounds = 20,
                      objective = "reg:logistic",
                      scale_pos_weight=5,
-                     verbose=0)
+                     verbose=1)
     
   return(fit_xgb)
 }
