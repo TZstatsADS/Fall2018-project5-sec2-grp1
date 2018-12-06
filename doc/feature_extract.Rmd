@@ -1,0 +1,298 @@
+---
+title: "Project 5 OCR Post-processing"
+output: html_document
+---
+# Step 1 - Load library and source code
+```{r load lib, warning=FALSE, message = FALSE}
+packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2")
+# check packages that need to be installed.
+packages.needed <- setdiff(packages.used, intersect(installed.packages()[,1], packages.used))
+# install additional packages
+if(length(packages.needed)>0) { install.packages(packages.needed, dependencies = TRUE) }
+if (!require("pacman")) {
+  library(devtools)
+  install_github("trinker/pacman")
+}
+library(vwr)
+library(kernlab)
+library(rlist)
+library(utils)
+library(ggplot2)
+library(ngram)
+pacman::p_load(knitr, readr, stringr, tesseract, vecsets)
+
+source('../lib/document_match.R')
+source('../lib/match_correction.R')
+source('../lib/features.R')
+source('../lib/svm_cross_validation.R')
+source('../lib/prob_score.R')
+source('../lib/perform_correction.R')
+source('../lib/rebuild_lines.R')
+source('../lib/count_char.R')
+file_name_vec <- list.files("../data/ground_truth") #100 files in total
+```
+
+# Step 2 - read the files and conduct Tesseract OCR
+
+# Step 3 - Error detection
+
+Now, we are ready to conduct post-processing, based on the Tessearct OCR output. First of all, we need to detect errors, or *incorrectly processed words*.
+
+The referenced paper is:
+Probabilistic techniques -- [SVM garbage detection](https://dl.acm.org/citation.cfm?doid=2034617.2034626)
+
+## Step 3.1 - Data preperation
+
+First, we prepare the data based on all 100 tesseract files. We label all the tokens as non-error or error through line-by-line comparison, and use the tokens in the line of interest in the ground truth files as a dictionary to check if the current tesseract token is an error.
+
+```{r data preparation}
+# initialze variables
+line_diff <- rep(NA, 100)
+ground_truth_list <- list(); ground_truth_list_vec <- list()
+tesseract_list <- list(); tesseract_list_vec <- list()
+tokens_per_line_list <- list(); truth_tokens_per_line_list <- list()
+error_list <- list(); nonerror_list <- list()
+clean_ind_list <- list()
+# for corrections
+error_list_vec <- list(); corrections_list_vec <- list()
+
+for (i in c(1:length(file_name_vec))) {
+  current_file_name <- file_name_vec[i]
+  ## read the ground truth text
+  current_ground_truth_txt <- readLines(paste("../data/ground_truth/",current_file_name,sep=""), warn=FALSE)
+  ## for the current file, construct a list of vectors with each element representing one line
+  current_ground_truth_list_vec <- lapply(current_ground_truth_txt, stringsplit_1st)
+  ground_truth_list_vec[[i]] <- current_ground_truth_list_vec
+  ## count the number of tokens in each line
+  truth_tokens_per_line_list[[i]]  <- sapply(current_ground_truth_list_vec, length)
+  ## create a vector including all the tokens in the current file
+  ground_truth_list[[i]] <- unlist(current_ground_truth_list_vec)
+  
+  ## read the tesseract text: procedure similar to the ground truth files
+  current_tesseract_txt <- readLines(paste("../data/tesseract/",current_file_name,sep=""), warn=FALSE)
+  current_tesseract_list_vec <- lapply(current_tesseract_txt, stringsplit_1st)
+  tesseract_list_vec[[i]] <- current_tesseract_list_vec
+  tokens_per_line_list[[i]] <- sapply(current_tesseract_list_vec, length)
+  current_tesseract_vec <- unlist(current_tesseract_list_vec)
+  tesseract_list[[i]]<- current_tesseract_vec
+  
+  ## compare tesseract text and ground truth, basically matching them line by line
+  match_result <- doc_match(current_tesseract_list_vec, current_ground_truth_list_vec)
+  current_clean_ind <- unlist(match_result[[1]])
+  clean_ind_list[[i]] <- current_clean_ind
+  ## get the diffence in the number of lines between the tesseract file and the ground truth
+  line_diff[i] <- match_result[[2]]
+  error_list_vec[[i]] <- match_result[[3]]
+  ## create a vector of errors and one of non-errors for the current tesseract file
+  error_list[[i]] <- current_tesseract_vec[!current_clean_ind]
+  nonerror_list[[i]] <- current_tesseract_vec[current_clean_ind]
+  
+  ## for correction use
+  corrections_list_vec[[i]] <- match_correct(current_tesseract_list_vec, current_ground_truth_list_vec)
+}
+
+# compute the ground truth mean number of tokens per line
+truth_mean_tokens_per_line <- mean(sapply(truth_tokens_per_line_list, mean))
+# do the same for tesseract
+tesseract_mean_tokens_per_line <- mean(sapply(tokens_per_line_list, mean))
+```
+
+
+
+
+## Step 3.2 - Train SVM
+
+### Step 3.2.1 - Training data preparation
+
+improvement
+```{r}
+train_file_id <- c(3:10, 17:38, 40:41, 47:68, 75:100)
+# train_file_id <- c(3, 17:18, 40, 47:49, 75:77)
+# train_file_id <- 3:4
+train_tesseract_list <- tesseract_list[train_file_id]
+train_clean_ind_list <- clean_ind_list[train_file_id]
+train_truth_list <- ground_truth_list[train_file_id]
+train_truth <- unlist(train_truth_list)
+train_truth_unique <- unique(train_truth)
+train_ngrams <- prepare_ngram(train_tesseract_list)
+train_freq_ngrams <- table(train_ngrams)
+
+# compile a frequency list of letter bigrams
+train_truth_bigrams <- tolower(unlist(lapply(train_truth, bigram_from_token)))
+train_freq_bigrams <- table(train_truth_bigrams)
+
+time_trainfeat <- system.time(train_input <- extract_feature(train_tesseract_list, train_truth_unique, train_freq_ngrams, train_freq_bigrams))
+train_labels <- unlist(train_clean_ind_list)
+
+save(train_input, file="../output/feature_train.RData")
+```
+
+
+### Step 3.2.2 - Cross validation
+
+Considering that an undetected error will not get into the correction phase, we evaluate error detection as a recall oriented task, which focus more on finding all possible errors. Here we perform a 5-fold cross validation for the svm model using recall as evaluation metric. The tuning parameter is the bandwidth for the Gaussian kernel (as stated in the paper), sigma.
+
+```{r cross validation}
+set.seed(1)
+K <- 5
+# 5-fold cross validation for tuning the bandwith parameter sigma
+sigmas <- c(0.01, 0.1, 1)
+cv <- perform_cv(train_input, train_labels, sigmas, K)
+save(cv, file="../output/cv_result.RData")
+```
+
+### Step 3.2.3 - Train SVM model
+
+According to the results of cross-validation, the best sigma is 0.1. Now we can train the SVM model based on 80 training files.
+
+```{r model fitting}
+set.seed(1)
+# load("../output/cv_result.RData")
+# cv_result <- cv$cv_result
+# best_sigma <- cv$best_sigma
+best_sigma <- 0.1
+
+# train the svm model
+time_trainsvm <- (system.time(
+  fit_svm <- ksvm(train_input, as.factor(train_labels), type = "C-svc", kernel = "rbfdot", 
+                  kpar = list(sigma = best_sigma))))
+
+save(fit_svm, time_trainsvm, file="../output/fit_svm.RData")
+```
+
+## Step 3.3 - Test SVM
+
+We use the rest 20 tesseract files of tokens as the test data.
+
+```{r test svm}
+test_file_id <- c(1:2, 11:16, 39, 42:46, 69:74)
+# test_file_id <- c(1, 11, 39, 42, 69)
+# preds_list <- list()
+# lists of test tokens
+test_tokens_list <- tesseract_list[test_file_id]
+# test_tokens_unique <- unique(unlist(test_tokens_list))
+# labels are logical TRUE/FALSE
+test_labels_list <- clean_ind_list[test_file_id]
+test_labels <- unlist(test_labels_list)
+# make a list of matrices for the input features instead of collapsing them into one matrix 
+# for future document match on the corrected errors
+
+test_ngrams <- prepare_ngram(test_tokens_list)
+test_freq_ngrams <- table(test_ngrams)
+
+ 
+time_trainfeat <- system.time(train_input <- extract_feature(train_tesseract_list, train_truth_unique, train_freq_ngrams, train_freq_bigrams))
+
+time_testfeat <- system.time(test_input <- extract_feature(test_tokens_list, train_truth_unique, test_freq_ngrams, train_freq_bigrams))
+preds <- as.logical(predict(fit_svm, test_input))
+save(preds, time_testfeat, test_input, file="../output/predict_svm.RData")
+```
+
+
+# Step 4 - Error correction
+
+Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates.
+
+The referenced paper is:
+1. [probability scoring with contextual constraints](https://link.springer.com/content/pdf/10.1007%2FBF01889984.pdf)
+
+2. Mei, J., Islam, A., Wu, Y., Moh'd, A., & Milios, E. E. (2016). *Statistical learning for OCR text correction*. arXiv preprint arXiv:1611.06950. [pdf](https://arxiv.org/pdf/1611.06950.pdf)
+
+3. Aminul Islam and Diana Inkpen. 2009a. *Real-word spelling correction using google web 1tn-gram data set*. In Proceedings of the 18th ACM Conference on Informationand Knowledge Management,CIKM '09, pages 1689-1692, New York, NY, USA. ACM 
+
+4. A. Islam and D. Inkpen. *Semantic text similarity using corpus-based word similarity and string similarity*. ACM Transactions on Knowledge Discovery from Data, vol. 2, no. 2, pp. 1-25, 2008. 
+
++ Input: error tokens in train set and test set
++ Output: trained model&corrections for detected errors in the test set 
+
+```{r}
+source('../lib/score_components.R')
+```
+
+## Step 4.1 - Data preperation
+
+Since transposition errors are common in human-generated text but rarely occur in the OCR-generated text, we apply Levenshtein distance (Levenshtein, 1966), which uses a simpler operation set without transposition to choose candidates.
+```{r}
+# load data
+ground_truth_txt <- readLines("../output/train_truth.txt", warn=FALSE)
+ground_truth_list_vec <- lapply(ground_truth_txt, stringsplit_1st)
+ground_truth_list <- unlist(ground_truth_list_vec)
+
+train_data <- read.csv('../output/Detection_list.csv')
+  
+# Use training ground truth to create n-gram context
+n_gram <- 3
+context_ground_truth <- list()
+for (i in 1:(length(ground_truth_list)-(n_gram-1))){
+  context_name <- paste(ground_truth_list[(i):(i+n_gram-1)], collapse = " ")
+  context_ground_truth[[i]] <- context_name
+}
+context_3gram_freq <- list(ngram = unlist(unique(context_ground_truth)), 
+                           count = tabulate(match(context_ground_truth, unique(context_ground_truth))))
+
+train_truth_lexicon <- 1
+
+# set Levenshtein distance threshold
+thres <- 3
+
+all_words <- unique(c(english.words, tolower(train_truth_lexicon)))
+for (error_token in tess){
+  candidates <- unlist(levenshtein.neighbors(word, all_words)[1:thres])
+  features <- score_features(wc=candidates, we=error_token, thres=3, lexicon=, context_we=, context_3grams_freq=)
+}
+
+```
+
+## Step 4.2 - Train the model with score features
+
+### Model selection with cross-validation
+```{r}
+
+```
+
+### Train the model with entire training set 
+
+```{r}
+
+```
+
+## Step 4.3 - Make predictions on test set
+
+```{r}
+
+
+```
+
+
+# Step 5 - Performance measure
+
+## Step 5.1 - Evaluation on detection performance measure
+
+Considering that an undetected error will not get into the correction phase, we evaluate error detection as a recall oriented task, which focus more on finding all possible errors. Below is the confusion matrix for error detection. To evaluate the performance of error detection, we define
+
+\begin{align*}
+\mbox{detection recall}&=\frac{\mbox{number of correctly detected errors}}{\mbox{number of actual errors}}\\
+\mbox{detection precision}&=\frac{\mbox{number of correctly detected errors}}{\mbox{number of detected errors}}
+\end{align*}
+
+```{r error matrix}
+# relabel the actual correctness and model selection results
+# preds <- unlist(preds_list)
+test_labels <- unlist(test_labels_list)
+model_detection <- factor(ifelse(preds, "Correct","Error" ), levels = c("Error", "Correct"))
+actual_correctness <- factor(ifelse(test_labels, "Correct","Error" ), levels = c("Error", "Correct"))
+# create confusion matrix
+detection_confusion_matrix <- table(actual_correctness,model_detection)
+detection_confusion_matrix_frac <- round(detection_confusion_matrix/length(model_detection),4)
+# calculate recall and precision
+detection_recall <- detection_confusion_matrix[1,1]/sum(detection_confusion_matrix[1,])
+detection_precision <- detection_confusion_matrix[1,1]/sum(detection_confusion_matrix[,1])
+detection_recall_display <- paste(round(100*detection_recall,4), "%", sep  = "")
+detection_precision_display <- paste(round(100*detection_precision,4), "%", sep  = "")
+
+# display confusion matrix
+detection_confusion_matrix
+# display detection recall and precision 
+cat(" detection recall = ", detection_recall_display, "\n",
+    "detection precision = ", detection_precision_display, "\n")
+```
