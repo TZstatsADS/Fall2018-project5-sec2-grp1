@@ -180,7 +180,7 @@ test_labels <- unlist(test_labels_list)
 test_ngrams <- prepare_ngram(test_tokens_list)
 test_freq_ngrams <- table(test_ngrams)
 
-
+ 
 time_trainfeat <- system.time(train_input <- extract_feature(train_tesseract_list, train_truth_unique, train_freq_ngrams, train_freq_bigrams))
 
 time_testfeat <- system.time(test_input <- extract_feature(test_tokens_list, train_truth_unique, test_freq_ngrams, train_freq_bigrams))
@@ -205,9 +205,41 @@ The referenced paper is:
 + Input: error tokens in train set and test set
 + Output: trained model&corrections for detected errors in the test set 
 
+```{r}
+source('../lib/score_components.R')
+```
+
 ## Step 4.1 - Data preperation
 
+Since transposition errors are common in human-generated text but rarely occur in the OCR-generated text, we apply Levenshtein distance (Levenshtein, 1966), which uses a simpler operation set without transposition to choose candidates.
 ```{r}
+# load data
+ground_truth_txt <- readLines("../output/train_truth.txt", warn=FALSE)
+ground_truth_list_vec <- lapply(ground_truth_txt, stringsplit_1st)
+ground_truth_list <- unlist(ground_truth_list_vec)
+
+train_data <- read.csv('../output/Detection_list.csv')
+  
+# Use training ground truth to create n-gram context
+n_gram <- 3
+context_ground_truth <- list()
+for (i in 1:(length(ground_truth_list)-(n_gram-1))){
+  context_name <- paste(ground_truth_list[(i):(i+n_gram-1)], collapse = " ")
+  context_ground_truth[[i]] <- context_name
+}
+context_3gram_freq <- list(ngram = unlist(unique(context_ground_truth)), 
+                           count = tabulate(match(context_ground_truth, unique(context_ground_truth))))
+
+train_truth_lexicon <- 1
+
+# set Levenshtein distance threshold
+thres <- 3
+
+all_words <- unique(c(english.words, tolower(train_truth_lexicon)))
+for (error_token in tess){
+  candidates <- unlist(levenshtein.neighbors(word, all_words)[1:thres])
+  features <- score_features(wc=candidates, we=error_token, thres=3, lexicon=, context_we=, context_3grams_freq=)
+}
 
 ```
 
