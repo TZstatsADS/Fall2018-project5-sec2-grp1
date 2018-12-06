@@ -308,7 +308,7 @@ if(run.cv){
 }
 ```
 
-* Choose the "best"" parameter value
+* Choose the "best" parameter value
 ```{r}
 xgb_model_best=depth_values[1]
 if(run.cv){
@@ -341,12 +341,12 @@ print(importance)
 
 ## Step 4.3 - Make predictions on test set
 
-First extract the features
+First extract the features.
 ```{r, warning=FALSE}
 test_data <- read.csv('../output/test_error.csv')
 test_data <- test_data[1:5000,]
 
-thres1 <- 1
+thres1 <- 2
 # create the test features and labels
 cnt1 <- 0
 for (i in 1:nrow(test_data)){
@@ -356,7 +356,7 @@ for (i in 1:nrow(test_data)){
   candidates <- unlist(levenshtein.neighbors(as.character(test_data$c)[i], all_words)[1:thres1])
   if (length(candidates)>0){
     cnt1 <- cnt1 + 1
-    feature_i <- score_features(wc=candidates, we=as.character(test_data$c)[i], thres=1, lexicon=ground_truth_list, 
+    feature_i <- score_features(wc=candidates, we=as.character(test_data$c)[i], thres=2, lexicon=ground_truth_list, 
                              context_we=as.character(data.frame(lapply(test_data[i,2:6], as.character), stringsAsFactors=FALSE)), 
                              context_3grams_freq=context_3gram_freq)
     feature_i$label <- as.numeric(candidates == as.character(test_data$Truth)[i])
@@ -445,4 +445,7 @@ print(accuracy_with_cand)
 overall_accuracy <- sum(correction == test_truth)/nrow(test_data)
 print(overall_accuracy)
 ```
+
+Recall and precision.
+
 
