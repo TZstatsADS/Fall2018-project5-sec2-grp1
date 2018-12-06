@@ -344,7 +344,7 @@ print(importance)
 First extract the features.
 ```{r, warning=FALSE}
 test_data <- read.csv('../output/test_error.csv')
-test_data <- test_data[1:5000,]
+# test_data <- test_data[1:5000,]
 
 thres1 <- 2
 # create the test features and labels
