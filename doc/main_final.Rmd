@@ -182,6 +182,15 @@ test_labels <- unlist(test_labels_list)
 # make a list of matrices for the input features instead of collapsing them into one matrix 
 # for future document match on the corrected errors
 
+
+test_truth_list <- ground_truth_list[test_file_id]
+train_truth <- unlist(train_truth_list)
+train_truth_unique <- unique(train_truth)
+train_ngrams <- prepare_ngram(train_tesseract_list)
+train_freq_ngrams <- table(train_ngrams)
+
+
+
 test_ngrams <- prepare_ngram(test_tokens_list)
 test_freq_ngrams <- table(test_ngrams)
 
@@ -499,6 +508,7 @@ for (each in unique(feature_scores_test$tess)){
     test_truth <- c(test_truth, truth_each)
   }
 }
+
 ```
 
 #### adaboost
@@ -531,6 +541,20 @@ for (each in unique(feature_scores_test$tess)){
     test_truth1 <- c(test_truth1, truth_each)
   }
 }
+
+
+```
+
+```{r}
+numberforerror <- rep(NA,length(unique(feature_scores_test$tess)))
+for (i in 1:length(unique(feature_scores_test$tess))){
+  numberforerror[i] <- sum(unique(feature_scores_test$tess)[i]==test_data$tess)
+}
+correction_xgb <- rep(correction,numberforerror)
+test_truth_xgb <- rep(test_truth,numberforerror)
+
+correction_adb <- rep(correction1,numberforerror)
+test_truth_adb <- rep(test_truth1,numberforerror)
 ```
 
 # Step 5 - Performance measure
@@ -572,18 +596,18 @@ cat(" detection recall = ", detection_recall_display, "\n",
 
 The correction accuracy strongly depends on the threshold of Levenshtein distance. For instance, when we take threshold = 1, the result is shown below.
 ```{r}
-accuracy_with_cand <- sum(correction == test_truth)/length(correction)
+accuracy_with_cand <- sum(correction_xgb == test_truth_xgb)/length(correction_xgb)
 print(accuracy_with_cand)
 
-overall_accuracy <- sum(correction == test_truth)/nrow(test_data)
+overall_accuracy <- sum(correction_xgb == test_truth_xgb)/nrow(test_data)
 print(overall_accuracy)
 ```
 ### adaboost
 ```{r}
-accuracy_with_cand <- sum(correction1 == test_truth1)/length(correction1)
+accuracy_with_cand <- sum(correction_adb == test_truth_adb)/length(correction_adb)
 print(accuracy_with_cand)
 
-overall_accuracy <- sum(correction1 == test_truth1)/nrow(test_data)
+overall_accuracy <- sum(correction_adb == test_truth_adb)/nrow(test_data)
 print(overall_accuracy)
 ```
 
@@ -600,40 +624,47 @@ where *items* refer to either characters or words, and ground truth is the origi
 Both *precision* and *recall* are mathematically convenient measures because their numeric values are some decimal fractions in the range between 0.0 and 1.0, and thus can be written as percentages. For instance, recall is the percentage of words in the original text correctly found by the OCR engine, whereas precision is the percentage of correctly found words with respect to the total word count of the OCR output. Note that in the OCR-related literature, the term OCR accuracy often refers to recall.
 
 ```{r}
-load("../output/FinalDataframe.RData")
-load("../output/ALLgroundtruth_vec.RData")
+
+alltest <- read.csv("../output/test_error_new.csv")
+
+
+### ground trurh vector length and tesseract vector length
+tesslength <- 0
+for (i in 1:20){
+  c <- length(test_tokens_list[[i]])
+  tesslength <- tesslength+c
+}
+
+
+
+
+
 
 # word level evaluation
 # old interaction
-old_intersect_vec <- vecsets::vintersect(train_data$Truth,train_data$tess)
+old_intersect_vec <- vecsets::vintersect(alltest$Truth,alltest$tess)
 # new interaction
-new_intersect_vec <- vecsets::vintersect(dat$true_token[dat$label == 0],  dat$corrected_token[dat$label == 0])
+new_intersect_vec <- vecsets::vintersect(correction,  test_truth)
 new_intersect_vec2 <- c(old_intersect_vec, new_intersect_vec)
 
 OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
                                     "Tesseract_with_postprocessing" = rep(NA,4))
 row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
                                       "character_wise_recall","character_wise_precision")
-OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/length(ALLgroundtruth_vec)
-OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/length(dat$error_token)
-OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/length(ALLgroundtruth_vec)
-OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/length(dat$error_token)
+OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/tesslength
+OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/tesslength
+OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/tesslength
+OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/tesslength
 
 # character-level evaluation
 # old interaction
-ground_truth_vec_char <- str_split(paste(ALLgroundtruth_vec, collapse = ""), "")[[1]]
-tesseract_vec_char <- str_split(paste(dat$error_token, collapse = ""), "")[[1]]
-old_intersect_vec_char <- str_split(paste(dat$error_token[dat$label == 1], collapse = ""), "")[[1]]
+ground_truth_vec_char <- str_split(paste(unlist(test_tokens_list), collapse = ""), "")[[1]]
+tesseract_vec_char <- str_split(paste(unlist(test_tokens_list), collapse = ""), "")[[1]]
+old_intersect_vec_char <- str_split(paste(unlist(old_intersect_vec), collapse = ""), "")[[1]]
 # new interaction
 # function used to compare pairs of words in character level
-df <- data.frame(true_token=dat$true_token[dat$label == 0], 
-                 corrected_token=dat$corrected_token[dat$label == 0])
-fun <- function(row) {
-  return(vecsets::vintersect(str_split(tolower(row[1]),"")[[1]],
-                             str_split(tolower(row[2]),"")[[1]]))
-}
-correct_char = apply(as.matrix(df), 1, fun)
-new_intersect_vec_char <- c(old_intersect_vec_char, unlist(correct_char))
+
+new_intersect_vec_char <- str_split(paste(unlist(new_intersect_vec2), collapse = ""), "")[[1]]
 
 OCR_performance_table["character_wise_recall","Tesseract"] <- length(old_intersect_vec_char)/length(ground_truth_vec_char)
 OCR_performance_table["character_wise_precision","Tesseract"] <- length(old_intersect_vec_char)/length(tesseract_vec_char)
