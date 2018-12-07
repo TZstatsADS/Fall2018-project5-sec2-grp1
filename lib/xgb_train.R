@@ -26,7 +26,7 @@ xgb_train <- function(dat_train, label_train, par=NULL){
                      early_stopping_rounds = 20,
                      objective = "reg:logistic",
                      scale_pos_weight=5,
-                     verbose=1)
+                     verbose=0)
     
   return(fit_xgb)
 }

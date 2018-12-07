@@ -6,10 +6,10 @@ xgb_cv.function <- function(X.train, y.train, d, K){
   cv.error <- rep(NA, K)
   
   for (i in 1:K){
-    train.data <- X.train[s != i, ,]
-    train.label <- y.train[s != i, ,]
-    test.data <- X.train[s == i, ,]
-    test.label <- y.train[s == i, ,]
+    train.data <- X.train[s != i, ]
+    train.label <- y.train[s != i,]
+    test.data <- X.train[s == i,]
+    test.label <- y.train[s == i,]
     
     par <- list(depth=d)
     fit <- xgb_train(train.data, train.label, par)

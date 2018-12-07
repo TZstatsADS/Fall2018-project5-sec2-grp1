@@ -4,7 +4,7 @@ output: html_document
 ---
 # Step 1 - Load library and source code
 ```{r load lib, warning=FALSE, message = FALSE}
-packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2")
+packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2","qualV","rapportools","xgboost","JOUSBoost")
 # check packages that need to be installed.
 packages.needed <- setdiff(packages.used, intersect(installed.packages()[,1], packages.used))
 # install additional packages
@@ -20,6 +20,10 @@ library(utils)
 library(ggplot2)
 library(ngram)
 library(stringi)
+library(qualV)
+library(rapportools)
+library(xgboost)
+library(JOUSBoost)
 pacman::p_load(knitr, readr, stringr, tesseract, vecsets)
 
 source('../lib/document_match.R')
@@ -46,7 +50,7 @@ Probabilistic techniques -- [SVM garbage detection](https://dl.acm.org/citation.
 
 First, we prepare the data based on all 100 tesseract files. We label all the tokens as non-error or error through line-by-line comparison, and use the tokens in the line of interest in the ground truth files as a dictionary to check if the current tesseract token is an error.
 
-```{r data preparation}
+```{r data preparation,warning=FALSE}
 # initialze variables
 line_diff <- rep(NA, 100)
 ground_truth_list <- list(); ground_truth_list_vec <- list()
@@ -281,23 +285,37 @@ save(feature_scores, file="../output/train_correction.RData")
 
 ## Step 4.2 - Train the model with score features
 
+
 ### Model selection with cross-validation
 
+```{r}
+run.cv <- TRUE
+K <- 5
+```
+
+
+#### xgboost
 ```{r, message=FALSE, warning=FALSE}
 source("../lib/xgb_cv.R")
+source("../lib/xgb_train.R")
+source("../lib/xgb_test.R")
+load("../output/train_correction.RData")
+feat_train <- data.matrix(feature_scores[,1:5])
+label_train <- data.matrix(feature_scores$label)
+
 
 depth_values <- seq(3, 6, 1)
 
 if(run.cv){
    start_time <- Sys.time()
    xgb_err_cv <- array(dim=c(length(depth_values), 2))
-   for(k in 1:length(model_values)){
+   for(k in 1:length(depth_values)){
      cat("k=", k, "\n")
      xgb_err_cv[k,] <- xgb_cv.function(feat_train, label_train, depth_values[k], K)
    }
    end_time <- Sys.time()
    tm_xgb_cv <- end_time - start_time
-   print(tm_xgb_cv)
+  # print(tm_xgb_cv)
    save(xgb_err_cv, file="../output/xgb_err_cv.RData")
   }
 ```
@@ -306,8 +324,8 @@ Visualize the cv results.
 ```{r}
 if(run.cv){
   load("../output/xgb_err_cv.RData")
-  plot(depth_values, xgb_err_cv[,1], xlab="Interaction Depth", ylab="CV Error",
-       main="Cross Validation Error", type="n", ylim=c(0, 0.006))
+  plot(depth_values, xgb_err_cv[,1], xlab="Depth", ylab="CV Error",
+       main="Cross Validation Error", type="n", ylim=c(0, 0.02))
   points(depth_values, xgb_err_cv[,1], col="blue", pch=16)
   lines(depth_values, xgb_err_cv[,1], col="blue")
   arrows(depth_values, xgb_err_cv[,1]-xgb_err_cv[,2], depth_values, xgb_err_cv[,1]+xgb_err_cv[, 2], 
@@ -317,15 +335,63 @@ if(run.cv){
 
 * Choose the "best" parameter value
 ```{r}
-xgb_model_best=depth_values[1]
 if(run.cv){
   xgb_model_best <- depth_values[which.min(xgb_err_cv[,1])]
 }
-par_best_xgb <- list(depth=model_best)
+par_best_xgb <- list(depth=xgb_model_best)
+```
+
+#### adaboost
+
+```{r, message=FALSE, warning=FALSE}
+source("../lib/adaboostM1_cv.R")
+load("../output/train_correction.RData")
+feat_train1 <- data.matrix(feature_scores[,1:5])
+
+label_train1 <- data.matrix(ifelse(feature_scores$label==0,-1,1))
+
+tree_depth <- seq(2,4,1)
+
+if(run.cv){
+   start_time <- Sys.time()
+   adb_err_cv <- array(dim=c(length(tree_depth), 2))
+   for(k in 1:length(tree_depth)){
+     cat("k=", k, "\n")
+     adb_err_cv[k,] <- adaboostcv.function(feat_train1, label_train1, tree_depth[k], K)
+   }
+   end_time <- Sys.time()
+   tm_adb_cv <- end_time - start_time
+  # print(tm_adb_cv)
+   save(adb_err_cv, file="../output/adb_err_cv.RData")
+  }
+```
+
+Visualize the cv results.
+```{r}
+if(run.cv){
+  load("../output/adb_err_cv.RData")
+  plot(tree_depth, adb_err_cv[,1], xlab="Tree Depth", ylab="CV Error",
+       main="Cross Validation Error", type="n", ylim=c(0, 0.02))
+  points(tree_depth, adb_err_cv[,1], col="blue", pch=16)
+  lines(tree_depth, adb_err_cv[,1], col="blue")
+  arrows(tree_depth, adb_err_cv[,1]-adb_err_cv[,2], tree_depth, adb_err_cv[,1]+adb_err_cv[, 2], 
+        length=0.1, angle=90, code=3)
+}
+```
+
+* Choose the "best" parameter value
+```{r}
+if(run.cv){
+  adb_model_best <- tree_depth[which.min(adb_err_cv[,1])]
+}
+par_best_adb <- list(depth=adb_model_best)
 ```
 
 
+
 ### Train the model with entire training set 
+
+#### xgboost
 
 ```{r}
 source("../lib/xgb_train.R")
@@ -335,7 +401,6 @@ source("../lib/xgb_test.R")
 * Train the model with the entire training set using the selected model (model parameter) via cross-validation.
 ```{r}
 tm_train_xgb=NA
-par_best_xgb <- list(depth=4)
 tm_train_xgb <- system.time(fit_train_xgb <- xgb_train(feat_train, label_train, par_best_xgb))
 save(fit_train_xgb, file="../output/fit_train_xgb.RData")
 # load(file="../output/fit_train_xgb.RData")
@@ -347,9 +412,21 @@ importance <- xgb.importance(feature_names = colnames(feature_scores)[1:5], mode
 print(importance)
 ```
 
+#### adboost
+
+* Train the model with the entire training set using the selected model (model parameter) via cross-validation.
+```{r}
+tm_train_adb=NA
+tm_train_adb <- system.time(fit_train_adb <- adaboost(feat_train1, label_train1, par_best_adb))
+save(fit_train_adb, file="../output/fit_train_adb.RData")
+# load(file="../output/fit_train_adb.RData")
+```
+
+
+
 ## Step 4.3 - Make predictions on test set
 
-First extract the features.
+### First extract the features.
 ```{r, warning=FALSE}
 test_data <- read.csv('../output/test_error.csv')
 # test_data <- read.csv('../output/clean_test_error.csv')
@@ -390,7 +467,20 @@ label_test <- data.matrix(feature_scores_test$label)
 save(feature_scores_test, file="../output/test_correction.RData")
 ```
 
-Then predict the scores and choose the best correction.
+### Then predict the scores and choose the best correction.
+
+#### xgboost
+
+
+```{r}
+load("../output/test_correction.RData")
+feat_test <- data.matrix(feature_scores_test[,1:5])
+label_test <- data.matrix(feature_scores_test$label)
+
+```
+
+
+
 ```{r}
 predicted_score <- xgb_test(fit_train_xgb, feat_test)
 cnt2 <- 0
@@ -407,6 +497,38 @@ for (each in unique(feature_scores_test$tess)){
   } else{
     correction <- c(correction, correction_each)
     test_truth <- c(test_truth, truth_each)
+  }
+}
+```
+
+#### adaboost
+
+```{r}
+load("../output/test_correction.RData")
+feat_test1 <- data.matrix(feature_scores_test[,1:5])
+
+label_test1 <- data.matrix(ifelse(feature_scores_test$label==0,-1,1))
+
+```
+
+
+
+```{r}
+predicted_score <- predict(fit_train_adb, feat_test1,type="prob")
+cnt2 <- 0
+for (each in unique(feature_scores_test$tess)){
+  cnt2 <- cnt2 + 1
+  each_index <- which(feature_scores_test$tess == each)
+  test_each <- feature_scores_test[each_index,]
+  max_index <- which.max(predicted_score[each_index])
+  correction_each <- test_each[max_index, 'cand']
+  truth_each <- test_each[max_index, 'truth']
+  if (cnt2==1){
+    correction1 <- correction_each
+    test_truth1 <- truth_each
+  } else{
+    correction1 <- c(correction1, correction_each)
+    test_truth1 <- c(test_truth1, truth_each)
   }
 }
 ```
@@ -446,6 +568,8 @@ cat(" detection recall = ", detection_recall_display, "\n",
 
 ## Step 5.2 - Evaluation on correction performance measure
 
+### xgboost
+
 The correction accuracy strongly depends on the threshold of Levenshtein distance. For instance, when we take threshold = 1, the result is shown below.
 ```{r}
 accuracy_with_cand <- sum(correction == test_truth)/length(correction)
@@ -454,7 +578,69 @@ print(accuracy_with_cand)
 overall_accuracy <- sum(correction == test_truth)/nrow(test_data)
 print(overall_accuracy)
 ```
+### adaboost
+```{r}
+accuracy_with_cand <- sum(correction1 == test_truth1)/length(correction1)
+print(accuracy_with_cand)
 
-Recall and precision.
+overall_accuracy <- sum(correction1 == test_truth1)/nrow(test_data)
+print(overall_accuracy)
+```
+
+
+## Step 5.3 - Performance Evaluation
+
+The two most common OCR accuracy measures are precision and recall. Both are relative measures of the OCR accuracy because they are computed as ratios of the correct output to the total output (precision) or input (recall). More formally defined,
+\begin{align*}
+\mbox{precision}&=\frac{\mbox{number of correct items}}{\mbox{number of items in OCR output}}\\
+\mbox{recall}&=\frac{\mbox{number of correct items}}{\mbox{number of items in ground truth}}
+\end{align*}
+where *items* refer to either characters or words, and ground truth is the original text stored in the plain text file. 
+
+Both *precision* and *recall* are mathematically convenient measures because their numeric values are some decimal fractions in the range between 0.0 and 1.0, and thus can be written as percentages. For instance, recall is the percentage of words in the original text correctly found by the OCR engine, whereas precision is the percentage of correctly found words with respect to the total word count of the OCR output. Note that in the OCR-related literature, the term OCR accuracy often refers to recall.
+
+```{r}
+load("../output/FinalDataframe.RData")
+load("../output/ALLgroundtruth_vec.RData")
+
+# word level evaluation
+# old interaction
+old_intersect_vec <- vecsets::vintersect(train_data$Truth,train_data$tess)
+# new interaction
+new_intersect_vec <- vecsets::vintersect(dat$true_token[dat$label == 0],  dat$corrected_token[dat$label == 0])
+new_intersect_vec2 <- c(old_intersect_vec, new_intersect_vec)
+
+OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
+                                    "Tesseract_with_postprocessing" = rep(NA,4))
+row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
+                                      "character_wise_recall","character_wise_precision")
+OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/length(ALLgroundtruth_vec)
+OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/length(dat$error_token)
+OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/length(ALLgroundtruth_vec)
+OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/length(dat$error_token)
+
+# character-level evaluation
+# old interaction
+ground_truth_vec_char <- str_split(paste(ALLgroundtruth_vec, collapse = ""), "")[[1]]
+tesseract_vec_char <- str_split(paste(dat$error_token, collapse = ""), "")[[1]]
+old_intersect_vec_char <- str_split(paste(dat$error_token[dat$label == 1], collapse = ""), "")[[1]]
+# new interaction
+# function used to compare pairs of words in character level
+df <- data.frame(true_token=dat$true_token[dat$label == 0], 
+                 corrected_token=dat$corrected_token[dat$label == 0])
+fun <- function(row) {
+  return(vecsets::vintersect(str_split(tolower(row[1]),"")[[1]],
+                             str_split(tolower(row[2]),"")[[1]]))
+}
+correct_char = apply(as.matrix(df), 1, fun)
+new_intersect_vec_char <- c(old_intersect_vec_char, unlist(correct_char))
+
+OCR_performance_table["character_wise_recall","Tesseract"] <- length(old_intersect_vec_char)/length(ground_truth_vec_char)
+OCR_performance_table["character_wise_precision","Tesseract"] <- length(old_intersect_vec_char)/length(tesseract_vec_char)
+OCR_performance_table["character_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec_char)/length(ground_truth_vec_char)
+OCR_performance_table["character_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec_char)/length(tesseract_vec_char)
+
+kable(OCR_performance_table, caption="Summary of OCR performance")
+```
 
 
