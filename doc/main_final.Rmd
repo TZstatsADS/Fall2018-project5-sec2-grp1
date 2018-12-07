@@ -19,6 +19,7 @@ library(rlist)
 library(utils)
 library(ggplot2)
 library(ngram)
+library(stringi)
 pacman::p_load(knitr, readr, stringr, tesseract, vecsets)
 
 source('../lib/document_match.R')
@@ -233,7 +234,13 @@ context_3gram_freq <- list(ngram = unlist(unique(context_ground_truth)),
 # set Levenshtein distance threshold
 thres <- 2
 
-all_words <- unique(c(english.words, tolower(ground_truth_list)))
+ground_truth_list_clean <- 'first'
+for (each in unique(ground_truth_list)){
+  each_clean <- stri_extract_all_words(each)[[1]]
+  ground_truth_list_clean <- c(ground_truth_list_clean, each_clean)
+}
+# all_words <- unique(c(english.words, tolower(na.omit(ground_truth_list_clean))))
+all_words <- unique(c(english.words, tolower(na.omit(ground_truth_list))))
 
 # create the training features and labels
 cnt <- 0
@@ -331,6 +338,7 @@ tm_train_xgb=NA
 par_best_xgb <- list(depth=4)
 tm_train_xgb <- system.time(fit_train_xgb <- xgb_train(feat_train, label_train, par_best_xgb))
 save(fit_train_xgb, file="../output/fit_train_xgb.RData")
+# load(file="../output/fit_train_xgb.RData")
 ```
 
 * Feature importance
@@ -344,6 +352,7 @@ print(importance)
 First extract the features.
 ```{r, warning=FALSE}
 test_data <- read.csv('../output/test_error.csv')
+# test_data <- read.csv('../output/clean_test_error.csv')
 # test_data <- test_data[1:5000,]
 
 thres1 <- 2
@@ -408,7 +417,7 @@ for (each in unique(feature_scores_test$tess)){
 
 Considering that an undetected error will not get into the correction phase, we evaluate error detection as a recall oriented task, which focus more on finding all possible errors. Below is the confusion matrix for error detection. To evaluate the performance of error detection, we define
 
-\begin{align*}
+\begin{align*} 
 \mbox{detection recall}&=\frac{\mbox{number of correctly detected errors}}{\mbox{number of actual errors}}\\
 \mbox{detection precision}&=\frac{\mbox{number of correctly detected errors}}{\mbox{number of detected errors}}
 \end{align*}
