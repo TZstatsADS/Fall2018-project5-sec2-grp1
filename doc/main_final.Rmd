@@ -3,6 +3,7 @@ title: "Project 5 OCR Post-processing"
 output: html_document
 ---
 # Step 1 - Load library and source code
+
 ```{r load lib, warning=FALSE, message = FALSE}
 packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2","ngram","stringi","qualV","rapportools","xgboost","JOUSBoost")
 # check packages that need to be installed.
@@ -27,7 +28,6 @@ library(JOUSBoost)
 pacman::p_load(knitr, readr, stringr, tesseract, vecsets)
 
 source('../lib/document_match.R')
-source('../lib/match_correction.R')
 source('../lib/features.R')
 source('../lib/svm_cross_validation.R')
 source('../lib/prob_score.R')
@@ -43,14 +43,20 @@ file_name_vec <- list.files("../data/ground_truth") #100 files in total
 
 Now, we are ready to conduct post-processing, based on the Tessearct OCR output. First of all, we need to detect errors, or *incorrectly processed words*.
 
-The referenced paper is:
+The referenced papers are:
+
 Probabilistic techniques -- [SVM garbage detection](https://dl.acm.org/citation.cfm?doid=2034617.2034626)
+
+[Statistical Learning for OCR Text Correction](https://arxiv.org/pdf/1611.06950.pdf)
+
+[OCR Post-Processing Text Correction using Simulated Annealing](http://aclweb.org/anthology/U17-1015)
+
 
 ## Step 3.1 - Data preperation
 
 First, we prepare the data based on all 100 tesseract files. We label all the tokens as non-error or error through line-by-line comparison, and use the tokens in the line of interest in the ground truth files as a dictionary to check if the current tesseract token is an error.
 
-```{r data preparation,warning=FALSE}
+```{r data preparation}
 # initialze variables
 line_diff <- rep(NA, 100)
 ground_truth_list <- list(); ground_truth_list_vec <- list()
@@ -59,7 +65,7 @@ tokens_per_line_list <- list(); truth_tokens_per_line_list <- list()
 error_list <- list(); nonerror_list <- list()
 clean_ind_list <- list()
 # for corrections
-error_list_vec <- list(); corrections_list_vec <- list()
+error_list_vec <- list()
 
 for (i in c(1:length(file_name_vec))) {
   current_file_name <- file_name_vec[i]
@@ -91,9 +97,6 @@ for (i in c(1:length(file_name_vec))) {
   ## create a vector of errors and one of non-errors for the current tesseract file
   error_list[[i]] <- current_tesseract_vec[!current_clean_ind]
   nonerror_list[[i]] <- current_tesseract_vec[current_clean_ind]
-  
-  ## for correction use
-  corrections_list_vec[[i]] <- match_correct(current_tesseract_list_vec, current_ground_truth_list_vec)
 }
 
 # compute the ground truth mean number of tokens per line
@@ -109,11 +112,9 @@ tesseract_mean_tokens_per_line <- mean(sapply(tokens_per_line_list, mean))
 
 ### Step 3.2.1 - Training data preparation
 
-improvement
+We use 70 tesseract files from 5 groups as our training set.
 ```{r}
-train_file_id <- c(3:10, 17:38, 40:41, 47:68, 75:100)
-# train_file_id <- c(3, 17:18, 40, 47:49, 75:77)
-# train_file_id <- 3:4
+train_file_id <- c(1:7, 11:30, 39:40, 42:60, 69:90)
 train_tesseract_list <- tesseract_list[train_file_id]
 train_clean_ind_list <- clean_ind_list[train_file_id]
 train_truth_list <- ground_truth_list[train_file_id]
@@ -167,12 +168,10 @@ save(fit_svm, time_trainsvm, file="../output/fit_svm.RData")
 
 ## Step 3.3 - Test SVM
 
-We use the rest 20 tesseract files of tokens as the test data.
+We use the rest 30 tesseract files of tokens as the test data.
 
 ```{r test svm}
-test_file_id <- c(1:2, 11:16, 39, 42:46, 69:74)
-# test_file_id <- c(1, 11, 39, 42, 69)
-# preds_list <- list()
+test_file_id <- c(8:10, 31:38, 41, 61:68, 91:100)
 # lists of test tokens
 test_tokens_list <- tesseract_list[test_file_id]
 num_test_tokens_list <- length(unlist(test_tokens_list)) #51866 tokens
@@ -191,12 +190,9 @@ train_truth_unique <- unique(train_truth)
 train_ngrams <- prepare_ngram(train_tesseract_list)
 train_freq_ngrams <- table(train_ngrams)
 
-
-
 test_ngrams <- prepare_ngram(test_tokens_list)
 test_freq_ngrams <- table(test_ngrams)
 
- 
 time_trainfeat <- system.time(train_input <- extract_feature(train_tesseract_list, train_truth_unique, train_freq_ngrams, train_freq_bigrams))
 
 time_testfeat <- system.time(test_input <- extract_feature(test_tokens_list, train_truth_unique, test_freq_ngrams, train_freq_bigrams))
@@ -207,16 +203,52 @@ save(preds, time_testfeat, test_input, file="../output/predict_svm.RData")
 
 # Step 4 - Error correction
 
-Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates.
+Given the detected word error, in order to find the best correction, we need to generating the candidate corrections: a dictionary or a database of legal n-grams to locate one or more potential correction terms. Then we need invoke some lexical-similarity measure between the misspelled string and the candidates or a probabilistic estimate of the likelihood of the correction to rank order the candidates. Here we compute several features for each correciton candidate, and use regression-based methods for candidate ranking.
 
-The referenced paper is:
-1. [probability scoring with contextual constraints](https://link.springer.com/content/pdf/10.1007%2FBF01889984.pdf)
+The referenced papers are:
 
-2. Mei, J., Islam, A., Wu, Y., Moh'd, A., & Milios, E. E. (2016). *Statistical learning for OCR text correction*. arXiv preprint arXiv:1611.06950. [pdf](https://arxiv.org/pdf/1611.06950.pdf)
+[Statistical Learning for OCR Text Correction](https://arxiv.org/pdf/1611.06950.pdf)
 
-3. Aminul Islam and Diana Inkpen. 2009a. *Real-word spelling correction using google web 1tn-gram data set*. In Proceedings of the 18th ACM Conference on Informationand Knowledge Management,CIKM '09, pages 1689-1692, New York, NY, USA. ACM 
+[OCR Post-Processing Text Correction using Simulated Annealing](http://aclweb.org/anthology/U17-1015)
 
-4. A. Islam and D. Inkpen. *Semantic text similarity using corpus-based word similarity and string similarity*. ACM Transactions on Knowledge Discovery from Data, vol. 2, no. 2, pp. 1-25, 2008. 
+The relevant features are:
+
+1) Minimum edit distance $d(w_{ci} , w_e )$ as calculated by Levenshtein's edit distance.
+
+2) Normalized longest common subsequence which takes into account the length of both the shorter and the longer string for normalization.
+
+$nlcs(w_{ci} , w_e ) =\frac{2*len(lcs(w_{ci} , w_e ))}{len(w_{ci}) + len(w_e)}$
+
+There are three types of modifications with different additional conditions: $\textit{NLCS}_1$ and $\textit{NLCS}_n$ use the subsequences starting at the first and the n-th character, respectively; $\textit{NLCS}_z$ takes the subsequences ending at the last character. They apply the same normalization as $\textit{NLCS}$.
+
+$nmnlcs_1(w_c , w_e ) =\frac{2 * len(mclcs_1(w_c , w_e ))}{len(w_c) + len(w_e)}$
+
+$nmnlcs_n(w_c , w_e ) =\frac{2 * len(mclcs_n(w_c , w_e ))}{len(w_c) + len(w_e)}$
+
+$nmnlcs_z(w_c , w_e ) =\frac{2 * len(mclcs_z(w_c , w_e ))}{len(w_c) + len(w_e)}$
+
+We use the weighted average of these four.
+
+3) Language popularity
+
+Using a language lexicon is a common approach to detect the non-word tokens,
+where non-existing tokens are detected as true errors. Let $w_c$ be the candidate string, $\mathcal{C}$ be the set of all error candidates, and $freq_1(¡¤)$ be the unigram frequency. The candidate confidence is the unigram popularity given by:
+
+$score(w_c, w_e) = \frac{freq_1(w_c)}{max_{w'_c \in C}freq_1(w'_c)}$
+
+
+4) Lexicon Existance
+
+Besides English lexicon, we can use different lexicons to detect the existence of the token in different subjects. It identifies additional lexical features. For example, we may use a domain specific lexicon to capture terminologies, which is especially useful for input text from the same domain. The candidate selection is the same as English lexicon, but the candidate score is a boolean value that indicates the detection result.
+
+$score(w_c, w_e) = \begin{cases} 1 & \text{if $w_c$ exists in the lexicon}\\ 0 & \text{otherwise} \end{cases}$
+
+5) Context popularity
+
+An appropriate correction candidate should be coherent in context. Using word n-gram for context analysis is a broadly researched approach in correcting real word errors (Islam and Inkpen, 2009a). Given an error word $w_e$ in a text, we have its n-gram contexts $\mathcal{G}$ constructed using a sliding window. To score a candidate $w_c$ of this error, we first substitute the error word from each of its n-gram contexts by such candidate and create a new set of contexts $\mathcal{G}_c$. Let $\mathcal{C}$ be all candidates suggested for $w_e$, and $freq_n(¡¤)$ be the n-gram frequency, which gives 0 to a non-existing n-gram.
+The score function is given as:
+
+$score(w_c, w_e) = \frac{\Sigma_{\textbf{c} \in \mathcal{G}_c} freq_n(\textbf{c})}{max_{w'_c \in \mathcal{C}}\{\Sigma_{\textbf{c'} \in \mathcal{G'}_c} freq_n(\textbf{c'})\}}$
 
 + Input: error tokens in train set and test set
 + Output: trained model&corrections for detected errors in the test set 
@@ -228,6 +260,8 @@ source('../lib/score_components.R')
 ## Step 4.1 - Data preperation
 
 Since transposition errors are common in human-generated text but rarely occur in the OCR-generated text, we apply Levenshtein distance (Levenshtein, 1966), which uses a simpler operation set without transposition to choose candidates.
+
+We formulate the confidence prediction task as a regression problem. Given candidate feature scores, we predict the confidence of each candidate being a correction for the error word. The confidence is used for ranking among candidates of one error. To train a regressor for correction, we label candidate features with 1 if a candidate is the intended correction, or 0 otherwise. The training data contains candidates from different errors, and there are more candidates labeled 0 than 1. 
 ```{r, warning=FALSE}
 # load data
 ground_truth_txt <- readLines("../output/train_truth.txt", warn=FALSE)
@@ -487,7 +521,6 @@ save(feature_scores_test, file="../output/test_correction.RData")
 load("../output/test_correction.RData")
 feat_test <- data.matrix(feature_scores_test[,1:5])
 label_test <- data.matrix(feature_scores_test$label)
-
 ```
 
 
