@@ -153,10 +153,9 @@ According to the results of cross-validation, the best sigma is 0.1. Now we can 
 
 ```{r model fitting}
 set.seed(1)
-# load("../output/cv_result.RData")
-# cv_result <- cv$cv_result
-# best_sigma <- cv$best_sigma
-best_sigma <- 0.1
+load("../output/cv_result.RData")
+cv_result <- cv$cv_result
+best_sigma <- cv$best_sigma
 
 # train the svm model
 time_trainsvm <- (system.time(
@@ -175,7 +174,6 @@ test_file_id <- c(8:10, 31:38, 41, 61:68, 91:100)
 # lists of test tokens
 test_tokens_list <- tesseract_list[test_file_id]
 num_test_tokens_list <- length(unlist(test_tokens_list)) #51866 tokens
-# test_tokens_unique <- unique(unlist(test_tokens_list))
 # labels are logical TRUE/FALSE
 test_labels_list <- clean_ind_list[test_file_id]
 test_labels <- unlist(test_labels_list)
@@ -309,14 +307,8 @@ for (i in 1:nrow(train_data)){
     } else{
       feature_scores <- rbind(feature_scores, feature_i)
     }
-#    if (cnt==1){
-#      labels <- as.numeric(candidates == as.character(train_data$Truth)[i])
-#    } else{
-#      labels <- c(labels, as.numeric(candidates == as.character(train_data$Truth)[i]))
-#    } 
   }
 }
-# feature_scores$label <- labels
 
 is.nan.data.frame <- function(x)
 do.call(cbind, lapply(x, is.nan))
@@ -474,8 +466,6 @@ save(fit_train_adb, file="../output/fit_train_adb.RData")
 ### First extract the features.
 ```{r, warning=FALSE}
 test_data <- read.csv('../output/test_error.csv')
-# test_data <- read.csv('../output/clean_test_error.csv')
-# test_data <- test_data[1:5000,]
 
 thres1 <- 2
 # create the test features and labels
@@ -605,7 +595,6 @@ Considering that an undetected error will not get into the correction phase, we 
 
 ```{r error matrix}
 # relabel the actual correctness and model selection results
-# preds <- unlist(preds_list)
 test_labels <- unlist(test_labels_list)
 model_detection <- factor(ifelse(preds, "Correct","Error" ), levels = c("Error", "Correct"))
 actual_correctness <- factor(ifelse(test_labels, "Correct","Error" ), levels = c("Error", "Correct"))
