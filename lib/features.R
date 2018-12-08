@@ -8,8 +8,7 @@ cut_bigram <- function(start_pos, token){
 
 bigram_from_token <- function(input_string){
   nb <- nchar(input_string)-1
-  if(nb >= 2) { bigram <- sapply(1:nb, cut_bigram, input_string) }
-  else { bigram <- input_string }
+  bigram <- ifelse(nb>=2,sapply(1:nb,cut_bigram,input_string),input_string)
   return(bigram)
 }
 
@@ -44,10 +43,13 @@ cur_token_features <- function(cur_token, tvec, truth_set, freq_bigrams){
 
     #feature 3 number of special symbols s and s/l
     sb <- 0
-    if ( l >= 2){
+    if (!is.na(l)){
+      if(l >=2){
       bulk <- substr(cur_token, start = 1, stop = l-1)
       sb <- str_count(bulk, pattern = "[^[:alnum:]\\\"\\']")
-    }
+      }
+      }
+
     feature_list[[3]] <- c(sb, sb/l)
 
     #feature 4 number of digits d and d/l
@@ -91,7 +93,7 @@ cur_token_features <- function(cur_token, tvec, truth_set, freq_bigrams){
     #feature 10 bigram sum(frequency of the ith bigram in the list Lb/10000)/number of bigrams in input string
     cur_bigrams <- bigram_from_token(tolower(cur_token))
     n <- length(cur_bigrams)
-    if(n == 1) { if(nchar(cur_bigrams) == 1) n <- 0.5 }
+    if(n == 1) { if(!is.na(nchar(cur_bigrams))){if(nchar(cur_bigrams) == 1){ n <- 0.5 }}}
     feature_list[[10]] <- (sum(freq_bigrams[cur_bigrams],na.rm = TRUE)/10000)/n
 
     #feature 11 compute the number of occurences i of the most frequent symbol of the input string of length l
