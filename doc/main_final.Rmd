@@ -175,6 +175,7 @@ test_file_id <- c(1:2, 11:16, 39, 42:46, 69:74)
 # preds_list <- list()
 # lists of test tokens
 test_tokens_list <- tesseract_list[test_file_id]
+num_test_tokens_list <- length(unlist(test_tokens_list)) #51866 tokens
 # test_tokens_unique <- unique(unlist(test_tokens_list))
 # labels are logical TRUE/FALSE
 test_labels_list <- clean_ind_list[test_file_id]
@@ -184,6 +185,7 @@ test_labels <- unlist(test_labels_list)
 
 
 test_truth_list <- ground_truth_list[test_file_id]
+num_test_truth_list <- length(unlist(test_truth_list)) #51218 tokens
 train_truth <- unlist(train_truth_list)
 train_truth_unique <- unique(train_truth)
 train_ngrams <- prepare_ngram(train_tesseract_list)
@@ -628,17 +630,6 @@ Both *precision* and *recall* are mathematically convenient measures because the
 alltest <- read.csv("../output/test_error_new.csv")
 
 
-### ground trurh vector length and tesseract vector length
-tesslength <- 0
-for (i in 1:20){
-  c <- length(test_tokens_list[[i]])
-  tesslength <- tesslength+c
-}
-
-
-
-
-
 
 # word level evaluation
 # old interaction
@@ -651,14 +642,14 @@ OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
                                     "Tesseract_with_postprocessing" = rep(NA,4))
 row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
                                       "character_wise_recall","character_wise_precision")
-OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/tesslength
-OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/tesslength
-OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/tesslength
-OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/tesslength
+OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/num_test_truth_list
+OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/num_test_tokens_list
+OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/num_test_truth_list
+OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/num_test_tokens_list
 
 # character-level evaluation
 # old interaction
-ground_truth_vec_char <- str_split(paste(unlist(test_tokens_list), collapse = ""), "")[[1]]
+ground_truth_vec_char <- str_split(paste(unlist(test_truth_list), collapse = ""), "")[[1]]
 tesseract_vec_char <- str_split(paste(unlist(test_tokens_list), collapse = ""), "")[[1]]
 old_intersect_vec_char <- str_split(paste(unlist(old_intersect_vec), collapse = ""), "")[[1]]
 # new interaction
