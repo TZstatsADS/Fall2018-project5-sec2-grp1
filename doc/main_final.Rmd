@@ -57,7 +57,7 @@ Probabilistic techniques -- [SVM garbage detection](https://dl.acm.org/citation.
 
 First, we prepare the data based on all 100 tesseract files. We label all the tokens as non-error or error through line-by-line comparison, and use the tokens in the line of interest in the ground truth files as a dictionary to check if the current tesseract token is an error.
 
-```{r data preparation}
+```{r data preparation,warning=FALSE}
 # initialze variables
 line_diff <- rep(NA, 100)
 ground_truth_list <- list(); ground_truth_list_vec <- list()
@@ -113,9 +113,9 @@ tesseract_mean_tokens_per_line <- mean(sapply(tokens_per_line_list, mean))
 
 ### Step 3.2.1 - Training data preparation
 
-We use 70 tesseract files from 5 groups as our training set.
-```{r}
-train_file_id <- c(1:7, 11:30, 39:40, 42:60, 69:90)
+We use 80 tesseract files from 5 groups as our training set.
+```{r,warning=FALSE}
+train_file_id <- c(3:10, 17:38, 40:41, 47:68, 75:100)
 train_tesseract_list <- tesseract_list[train_file_id]
 train_clean_ind_list <- clean_ind_list[train_file_id]
 train_truth_list <- ground_truth_list[train_file_id]
@@ -168,10 +168,10 @@ save(fit_svm, time_trainsvm, file="../output/fit_svm.RData")
 
 ## Step 3.3 - Test SVM
 
-We use the rest 30 tesseract files of tokens as the test data.
+We use the rest 20 tesseract files of tokens as the test data.
 
 ```{r test svm}
-test_file_id <- c(8:10, 31:38, 41, 61:68, 91:100)
+test_file_id <- c(1:2, 11:16,39,42:46, 69:74)
 # lists of test tokens
 test_tokens_list <- tesseract_list[test_file_id]
 num_test_tokens_list <- length(unlist(test_tokens_list)) #51866 tokens
@@ -231,7 +231,7 @@ We use the weighted average of these four.
 3) Language popularity
 
 Using a language lexicon is a common approach to detect the non-word tokens,
-where non-existing tokens are detected as true errors. Let $w_c$ be the candidate string, $\mathcal{C}$ be the set of all error candidates, and $freq_1(¡¤)$ be the unigram frequency. The candidate confidence is the unigram popularity given by:
+where non-existing tokens are detected as true errors. Let $w_c$ be the candidate string, $\mathcal{C}$ be the set of all error candidates, and $freq_1(??)$ be the unigram frequency. The candidate confidence is the unigram popularity given by:
 
 $score(w_c, w_e) = \frac{freq_1(w_c)}{max_{w'_c \in C}freq_1(w'_c)}$
 
@@ -244,7 +244,7 @@ $score(w_c, w_e) = \begin{cases} 1 & \text{if $w_c$ exists in the lexicon}\\ 0 &
 
 5) Context popularity
 
-An appropriate correction candidate should be coherent in context. Using word n-gram for context analysis is a broadly researched approach in correcting real word errors (Islam and Inkpen, 2009a). Given an error word $w_e$ in a text, we have its n-gram contexts $\mathcal{G}$ constructed using a sliding window. To score a candidate $w_c$ of this error, we first substitute the error word from each of its n-gram contexts by such candidate and create a new set of contexts $\mathcal{G}_c$. Let $\mathcal{C}$ be all candidates suggested for $w_e$, and $freq_n(¡¤)$ be the n-gram frequency, which gives 0 to a non-existing n-gram.
+An appropriate correction candidate should be coherent in context. Using word n-gram for context analysis is a broadly researched approach in correcting real word errors (Islam and Inkpen, 2009a). Given an error word $w_e$ in a text, we have its n-gram contexts $\mathcal{G}$ constructed using a sliding window. To score a candidate $w_c$ of this error, we first substitute the error word from each of its n-gram contexts by such candidate and create a new set of contexts $\mathcal{G}_c$. Let $\mathcal{C}$ be all candidates suggested for $w_e$, and $freq_n(??)$ be the n-gram frequency, which gives 0 to a non-existing n-gram.
 The score function is given as:
 
 $score(w_c, w_e) = \frac{\Sigma_{\textbf{c} \in \mathcal{G}_c} freq_n(\textbf{c})}{max_{w'_c \in \mathcal{C}}\{\Sigma_{\textbf{c'} \in \mathcal{G'}_c} freq_n(\textbf{c'})\}}$
@@ -253,6 +253,7 @@ $score(w_c, w_e) = \frac{\Sigma_{\textbf{c} \in \mathcal{G}_c} freq_n(\textbf{c}
 + Output: trained model&corrections for detected errors in the test set 
 
 ```{r}
+#### function to generate features for every proposed corrections
 source('../lib/score_components.R')
 ```
 
@@ -291,6 +292,7 @@ for (each in unique(ground_truth_list)){
 all_words <- unique(c(english.words, tolower(na.omit(ground_truth_list))))
 
 # create the training features and labels
+#### here, score_features is a function to generate features for every proposed candidte
 cnt <- 0
 for (i in 1:nrow(train_data)){
   if (i %% 1000 == 1){
@@ -315,6 +317,7 @@ is.nan.data.frame <- function(x)
 do.call(cbind, lapply(x, is.nan))
 feature_scores[is.nan(feature_scores)] <- 0
 
+### save features for training data
 feat_train <- data.matrix(feature_scores[,1:5])
 label_train <- data.matrix(feature_scores$label)
 
@@ -327,6 +330,7 @@ save(feature_scores, file="../output/train_correction.RData")
 ### Model selection with cross-validation
 
 ```{r}
+### parameter for cv ( 5 floders)
 run.cv <- TRUE
 K <- 5
 ```
@@ -334,6 +338,7 @@ K <- 5
 
 #### xgboost
 ```{r, message=FALSE, warning=FALSE}
+#### cv, train and test function for xgboost
 source("../lib/xgb_cv.R")
 source("../lib/xgb_train.R")
 source("../lib/xgb_test.R")
@@ -341,7 +346,7 @@ load("../output/train_correction.RData")
 feat_train <- data.matrix(feature_scores[,1:5])
 label_train <- data.matrix(feature_scores$label)
 
-
+### parameter to choose
 depth_values <- seq(3, 6, 1)
 
 if(run.cv){
@@ -382,12 +387,14 @@ par_best_xgb <- list(depth=xgb_model_best)
 #### adaboost
 
 ```{r, message=FALSE, warning=FALSE}
+#### cv function for adaboost using linear loss and decision tree as the weak classifer
 source("../lib/adaboostM1_cv.R")
 load("../output/train_correction.RData")
 feat_train1 <- data.matrix(feature_scores[,1:5])
 
 label_train1 <- data.matrix(ifelse(feature_scores$label==0,-1,1))
 
+#### parameter to choose: tree depth in decisino tree
 tree_depth <- seq(2,4,1)
 
 if(run.cv){
@@ -497,6 +504,7 @@ is.nan.data.frame <- function(x)
 do.call(cbind, lapply(x, is.nan))
 feature_scores_test[is.nan(feature_scores_test)] <- 0
 
+### save features for test data
 feat_test <- data.matrix(feature_scores_test[,1:5])
 label_test <- data.matrix(feature_scores_test$label)
 
@@ -517,6 +525,7 @@ label_test <- data.matrix(feature_scores_test$label)
 
 
 ```{r}
+### for every unique error token, provide the correction token with highest probability
 predicted_score <- xgb_test(fit_train_xgb, feat_test)
 cnt2 <- 0
 for (each in unique(feature_scores_test$tess)){
@@ -550,6 +559,7 @@ label_test1 <- data.matrix(ifelse(feature_scores_test$label==0,-1,1))
 
 
 ```{r}
+### for every unique error token, provide the correction token with highest probability
 predicted_score <- predict(fit_train_adb, feat_test1,type="prob")
 cnt2 <- 0
 for (each in unique(feature_scores_test$tess)){
@@ -572,6 +582,7 @@ for (each in unique(feature_scores_test$tess)){
 ```
 
 ```{r}
+#### find out the number of every unique error tokens in order to generate a correction list with the samle length of test list
 numberforerror <- rep(NA,length(unique(feature_scores_test$tess)))
 for (i in 1:length(unique(feature_scores_test$tess))){
   numberforerror[i] <- sum(unique(feature_scores_test$tess)[i]==test_data$tess)
@@ -652,12 +663,11 @@ Both *precision* and *recall* are mathematically convenient measures because the
 
 alltest <- read.csv("../output/test_error_new.csv")
 
-
-
 # word level evaluation
 # old interaction
 old_intersect_vec <- vecsets::vintersect(alltest$Truth,alltest$tess)
 # new interaction
+#### here we use the correction result from xgboost because it has higher accuracy acoording to step 5.2
 new_intersect_vec <- vecsets::vintersect(correction,  test_truth)
 new_intersect_vec2 <- c(old_intersect_vec, new_intersect_vec)
 
