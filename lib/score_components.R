@@ -34,7 +34,6 @@ score_features <- function(wc, we, thres, lexicon, context_we, context_3grams_fr
   #1. Minimum edit distance d(wci, we) as calculated by Levenshtein's edit distance.
   # with reference in paper Statistical Learning for OCR Text Correction
   score1 <- as.vector(1-levenshtein.distance(wc, we)/(thres+1))
-  # print(score1)
 
   # 2. String similarity
   # 2.1 Normalized longest common subsequence (Allison and Dix, 1986) which takes into account
@@ -92,29 +91,20 @@ score_features <- function(wc, we, thres, lexicon, context_we, context_3grams_fr
     
     score2[j] <- alpha1*nlcs+alpha2*nmnlcs1+alpha3*nmnlcsn+alpha4*nmnlcsz
   }
-  # print(score2)
 
   # Paper: Statistical Learning for OCR Text Correction
   
   #3 language popularity
   wc_freq <- lexic_freq(wc, lexicon)
   score3 <- wc_freq/max(wc_freq)
-  # print(score3)
 
   #4 lexicon existance
   exis <- ifelse(wc %in% lexicon, 1, 0)
-  # print(exis)
   
   #5 context popularity: sliding window of 3-gram for a token: 5 words in total
   wc_context_freq <- context_freq(wc, context_we, context_3grams_freq)
   score4 <- wc_context_freq/max(wc_context_freq)
-  # print(score4)
-  
-  # 6. relaxed-context popularity
-  # relax_wc_context_freq <- relax_context_freq(wc, context_we, context_3grams_freq)
-  # score5 <- relax_wc_context_freq/max(relax_wc_context_freq)
-  # print(score5)
-  
+
   #######################################################################
   feature_scores <- data.frame(L_dist=score1, str_sim=score2, lang_pop=score3, lexi_exist=exis, 
                                context_pop=score4 #,relaxed_context_pop=score5
