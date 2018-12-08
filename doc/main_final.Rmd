@@ -1,5 +1,5 @@
 ---
-title: "Project 5 OCR Post-processing"
+title: "Project 5 OCR Post-processing Improvment"
 output: html_document
 ---
 # Step 1 - Load library and source code
@@ -40,6 +40,7 @@ file_name_vec <- list.files("../data/ground_truth") #100 files in total
 # Step 2 - read the files and conduct Tesseract OCR
 
 # Step 3 - Error detection
+Our error detection improvement was based on the SVM classification, with several added features, particularly context-based. Other more advanced models were carried out in python.
 
 Now, we are ready to conduct post-processing, based on the Tessearct OCR output. First of all, we need to detect errors, or *incorrectly processed words*.
 
