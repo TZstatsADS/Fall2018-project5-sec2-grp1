@@ -4,7 +4,7 @@ output: html_document
 ---
 # Step 1 - Load library and source code
 ```{r load lib, warning=FALSE, message = FALSE}
-packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2","qualV","rapportools","xgboost","JOUSBoost")
+packages.used <- c("devtools","vwr","kernlab", "rlist", "utils", "ggplot2","ngram","stringi","qualV","rapportools","xgboost","JOUSBoost")
 # check packages that need to be installed.
 packages.needed <- setdiff(packages.used, intersect(installed.packages()[,1], packages.used))
 # install additional packages
