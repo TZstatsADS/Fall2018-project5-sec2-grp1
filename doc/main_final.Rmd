@@ -671,15 +671,6 @@ old_intersect_vec <- vecsets::vintersect(alltest$Truth,alltest$tess)
 new_intersect_vec <- vecsets::vintersect(correction,  test_truth)
 new_intersect_vec2 <- c(old_intersect_vec, new_intersect_vec)
 
-OCR_performance_table <- data.frame("Tesseract" = rep(NA,4),
-                                    "Tesseract_with_postprocessing" = rep(NA,4))
-row.names(OCR_performance_table) <- c("word_wise_recall","word_wise_precision",
-                                      "character_wise_recall","character_wise_precision")
-OCR_performance_table["word_wise_recall","Tesseract"] <- length(old_intersect_vec)/num_test_truth_list
-OCR_performance_table["word_wise_precision","Tesseract"] <- length(old_intersect_vec)/num_test_tokens_list
-OCR_performance_table["word_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/num_test_truth_list
-OCR_performance_table["word_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec2)/num_test_tokens_list
-
 # character-level evaluation
 # old interaction
 ground_truth_vec_char <- str_split(paste(unlist(test_truth_list), collapse = ""), "")[[1]]
@@ -690,12 +681,11 @@ old_intersect_vec_char <- str_split(paste(unlist(old_intersect_vec), collapse = 
 
 new_intersect_vec_char <- str_split(paste(unlist(new_intersect_vec2), collapse = ""), "")[[1]]
 
-OCR_performance_table["character_wise_recall","Tesseract"] <- length(old_intersect_vec_char)/length(ground_truth_vec_char)
-OCR_performance_table["character_wise_precision","Tesseract"] <- length(old_intersect_vec_char)/length(tesseract_vec_char)
-OCR_performance_table["character_wise_recall","Tesseract_with_postprocessing"] <- length(new_intersect_vec_char)/length(ground_truth_vec_char)
-OCR_performance_table["character_wise_precision","Tesseract_with_postprocessing"] <- length(new_intersect_vec_char)/length(tesseract_vec_char)
+length(new_intersect_vec_char)/length(ground_truth_vec_char)
+length(new_intersect_vec_char)/length(tesseract_vec_char)
+length(new_intersect_vec2)/num_test_truth_list
+length(new_intersect_vec2)/num_test_tokens_list
 
-kable(OCR_performance_table, caption="Summary of OCR performance")
 ```
 
 
